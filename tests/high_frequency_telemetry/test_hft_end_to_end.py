@@ -129,6 +129,7 @@ def test_hft_end_to_end_influxdb(duthosts, enum_rand_one_per_hwsku_hostname,
             tolerance_high=1.5,
             avg_tolerance=0.2,
             min_points=10,
+            max_outlier_ratio=0.01,
         )
         for series, stats in interval_result["groups"].items():
             logger.info(

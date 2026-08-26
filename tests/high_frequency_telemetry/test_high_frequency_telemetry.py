@@ -405,38 +405,14 @@ def test_hft_full_port_counters(duthosts, enum_rand_one_per_hwsku_hostname,
             output=result['stdout'],
             expected_objects=all_available_ports,
             min_counter_value=0,
-            expected_poll_interval=10000  # 10ms poll interval
-        )
-
-        # Verify we get counters (may not be exactly
-        # num_ports * num_counters if some counter types are not supported)
-        min_expected_counters = len(all_available_ports)  # At least one
-        # counter per port
-        actual_counters = validation_results['total_counters']
-        pytest_assert(
-            validation_results['total_counters'] >= min_expected_counters,
-            f"Expected at least {min_expected_counters} counters, "
-            f"got {actual_counters}"
-        )
-
-        # Log actual vs expected for debugging
-        max_expected_counters = (
-            len(all_available_ports) * len(all_port_counters)
+            expected_poll_interval=10000,  # 10ms poll interval
+            expected_stats=all_port_counters
         )
 
         logger.info(
-            f"Counter coverage: {actual_counters} counters verified "
-            f"({actual_counters/max_expected_counters*100: .1f}%)"
+            f"Verified all {len(all_port_counters)} configured counters "
+            f"for all {len(all_available_ports)} ports"
         )
-
-        if actual_counters < max_expected_counters:
-            logger.warning(
-                f"Got {actual_counters} counters, "
-                f"expected {max_expected_counters}. "
-                f"Some counter types may not be supported on this platform."
-            )
-        else:
-            logger.info("✓ All counter types are supported on this platform!")
 
         logger.info(f"Full port counter test completed successfully. "
                     f"Total counters verified: {validation_results['total_counters']} "

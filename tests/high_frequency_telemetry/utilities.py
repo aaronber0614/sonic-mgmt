@@ -875,7 +875,7 @@ def validate_config_state_transitions(
 
 def validate_counter_output(
     output, expected_objects=None, min_counter_value=0,
-    expected_poll_interval=None, expect_disabled=False
+    expected_poll_interval=None, expect_disabled=False, expected_stats=None
 ):
     """
     Validate countersyncd output for expected patterns and counter values.
@@ -888,6 +888,8 @@ def validate_counter_output(
                                 (optional)
         expect_disabled: If True, expect counters and Msg/s to be 0
                          (for disabled stream testing)
+        expected_stats: Counter names that must be present for every expected
+                        object (optional)
 
     Returns:
         dict: Validation results with counter values and object matches
@@ -910,12 +912,13 @@ def validate_counter_output(
     else:
         return validate_enabled_stream_output(
             output, expected_objects, min_counter_value,
-            expected_poll_interval
+            expected_poll_interval, expected_stats
         )
 
 
 def validate_enabled_stream_output(
-    output, expected_objects, min_counter_value, expected_poll_interval
+    output, expected_objects, min_counter_value, expected_poll_interval,
+    expected_stats
 ):
     """
     Validate output for enabled streams - expect active data flow.
@@ -1049,6 +1052,26 @@ def validate_enabled_stream_output(
             object_matches[obj_name] = [int(val) for val in obj_matches]
             logger.info(f"Successfully verified counters for {obj_name}: {object_matches[obj_name]}")
 
+    stat_matches = {}
+    if expected_objects and expected_stats:
+        for obj_name in expected_objects:
+            stat_matches[obj_name] = {}
+            for stat_name in expected_stats:
+                stat_pattern = (
+                    rf'Object:\s*{re.escape(obj_name)}\s*,\s*'
+                    rf'Stat:\s*{re.escape(stat_name)}\s*,\s*'
+                    rf'Counter:\s*(\d+)'
+                )
+                matches = re.findall(stat_pattern, stable_output)
+                pytest_assert(
+                    len(matches) > 0,
+                    f"No {stat_name} counter reports found for "
+                    f"{obj_name} in stable data"
+                )
+                stat_matches[obj_name][stat_name] = [
+                    int(value) for value in matches
+                ]
+
     # Validate LastTime timestamps - expect them to be close to current UTC time
     lasttime_pattern = r'LastTime: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+) UTC'
     lasttime_matches = re.findall(lasttime_pattern, stable_output)
@@ -1093,6 +1116,7 @@ def validate_enabled_stream_output(
     return {
         "counter_values": counter_values,
         "object_matches": object_matches,
+        "stat_matches": stat_matches,
         "total_counters": len(counter_matches),
         "actual_msg_per_sec": [float(m) for m in msg_per_sec_matches] if msg_per_sec_matches else [],
         "msg_per_sec_validation": msg_validation_result,
@@ -1745,14 +1769,16 @@ def parse_influxdb_json(json_text):
 def validate_influxdb_intervals(ptfhost, bucket="home", port=8181,
                                 expected_interval_ms=10,
                                 tolerance_low=0.5, tolerance_high=1.5,
-                                avg_tolerance=0.2, min_points=10):
+                                avg_tolerance=0.2, min_points=10,
+                                max_outlier_ratio=0):
     """
     Validate that HFT data points in InfluxDB arrive at the expected interval.
 
     Queries all data from the last 5 minutes using InfluxQL, groups by series,
     and for each group checks that:
-      1. Consecutive timestamp deltas fall within
+      1. The ratio of consecutive timestamp deltas outside
          [expected_ms * tolerance_low, expected_ms * tolerance_high]
+         does not exceed max_outlier_ratio
       2. The average delta is within avg_tolerance of expected_ms
 
     Args:
@@ -1764,6 +1790,8 @@ def validate_influxdb_intervals(ptfhost, bucket="home", port=8181,
         tolerance_high: upper multiplier (1.5 = 150% of expected)
         avg_tolerance: allowed deviation ratio for average (0.2 = 20%)
         min_points: minimum data points per group to validate
+        max_outlier_ratio: maximum allowed ratio of intervals outside the
+                           configured range (0.01 = 1%)
 
     Returns:
         dict with keys:
@@ -1839,6 +1867,9 @@ def validate_influxdb_intervals(ptfhost, bucket="home", port=8181,
         avg_delta = sum(deltas_ms) / len(deltas_ms) if deltas_ms else 0
         min_delta = min(deltas_ms) if deltas_ms else 0
         max_delta = max(deltas_ms) if deltas_ms else 0
+        outlier_ratio = (
+            len(out_of_range) / len(deltas_ms) if deltas_ms else 0
+        )
 
         stats = {
             "num_points": len(timestamps),
@@ -1847,6 +1878,7 @@ def validate_influxdb_intervals(ptfhost, bucket="home", port=8181,
             "min_ms": round(min_delta, 3),
             "max_ms": round(max_delta, 3),
             "out_of_range_count": len(out_of_range),
+            "out_of_range_ratio": round(outlier_ratio, 6),
         }
         all_stats[series_key] = stats
 
@@ -1858,11 +1890,12 @@ def validate_influxdb_intervals(ptfhost, bucket="home", port=8181,
         )
 
         # Check individual intervals
-        if out_of_range:
-            pct = len(out_of_range) / len(deltas_ms) * 100
+        if outlier_ratio > max_outlier_ratio:
             violations.append(
                 f"{series_key}: {len(out_of_range)}/{len(deltas_ms)} "
-                f"intervals ({pct:.1f}%) outside [{min_ms}, {max_ms}]ms"
+                f"intervals ({outlier_ratio * 100:.1f}%) outside "
+                f"[{min_ms}, {max_ms}]ms, exceeding the allowed "
+                f"{max_outlier_ratio * 100:.1f}%"
             )
 
         # Check average interval
@@ -1873,6 +1906,11 @@ def validate_influxdb_intervals(ptfhost, bucket="home", port=8181,
                 f"more than {avg_tolerance * 100}% from expected "
                 f"{expected_interval_ms}ms"
             )
+
+    if not all_stats:
+        violations.append(
+            f"No series contained the required minimum of {min_points} points"
+        )
 
     return {
         "groups": all_stats,

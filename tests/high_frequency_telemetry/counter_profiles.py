@@ -35,6 +35,13 @@ _PORT_COUNTERS = (
     "IF_OUT_UCAST_PKTS",
 )
 
+_PORT_COUNTERS_VPP = (
+    "IF_IN_OCTETS",
+    "IF_OUT_OCTETS",
+    "IF_IN_DISCARDS",
+    "IF_OUT_ERRORS",
+)
+
 _QUEUE_COUNTERS = (
     "BYTES",
     "CURR_OCCUPANCY_CELLS",
@@ -82,6 +89,12 @@ SUPPORTED_STATS: Mapping[str, Mapping[CounterObjectType, Sequence[str]]] = {
     "x86_64-arista_7060x6_64pe_b": {
         CounterObjectType.PORT: (),
         CounterObjectType.QUEUE: (),
+    },
+    "x86_64-kvm_x86_64-r0": {
+        CounterObjectType.PORT: _PORT_COUNTERS_VPP,
+        CounterObjectType.QUEUE: (),
+        CounterObjectType.BUFFER_POOL: (),
+        CounterObjectType.INGRESS_PRIORITY_GROUP: (),
     },
     _DEFAULT_PLATFORM: {
         CounterObjectType.PORT: (),

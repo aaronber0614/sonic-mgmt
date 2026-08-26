@@ -722,21 +722,16 @@ bgp/test_bgp_vnet_scale.py:
 
 bgp/test_bgpmon.py:
   skip:
-    reason: "Not supported on T2 topology or topology backend"
+    reason: "Not supported on topology backend"
     conditions:
-      - "'backend' in topo_name or topo_type in ['t2', 'lrh', 'urh']"
+      - "'backend' in topo_name"
 
-bgp/test_bgpmon.py::test_bgpmon:
-  xfail:
-    reason: "xfail for IPv6-only topologies, issue https://github.com/sonic-net/sonic-mgmt/issues/20754"
-    conditions:
-      - "https://github.com/sonic-net/sonic-mgmt/issues/20754 and '-v6-' in topo_name"
-
-bgp/test_bgpmon_v6.py::test_bgpmon_no_ipv6_resolve_via_default:
+bgp/test_bgpmon.py::test_bgpmon_v4:
   skip:
-    reason: "Not applicable for passive bgpmon_v6 and UT2 does not use bgpmon_v6"
+    reason: "v4 bgpmon is only applicable on t0/t1 topologies"
     conditions:
-      - "platform in ['x86_64-arista_7280dr3am_36']"
+      - "topo_type not in ['t0', 't1']"
+
 
 bgp/test_startup_tsa_tsb_service.py::test_tsa_tsb_service_with_supervisor_abnormal_reboot:
   skip:
@@ -768,6 +763,12 @@ bgp/test_traffic_shift.py::test_load_minigraph_with_traffic_shift_away:
     conditions:
       - "asic_type in ['vs']"
       - https://github.com/sonic-net/sonic-mgmt/issues/6471
+
+bgp/test_traffic_shift_lc.py:
+  skip:
+    reason: "test_traffic_shift_lc is only applicable to modular chassis platforms"
+    conditions:
+      - "is_chassis==False"
 
 bgp/test_traffic_shift_sup.py:
   skip:
@@ -1085,12 +1086,13 @@ decap/test_decap.py:
 
 decap/test_subnet_decap.py::test_vip_packet_decap:
   skip:
-    reason: "Supported only on T0 topology with KVM or broadcom td3 asic or mellanox asic, and available for 202405 release and later"
+    reason: "Supported only on T0 topology with KVM or broadcom td3 asic or mellanox asic, and available for 202405 release and later. Broadcom TD3 rejects VIP subnet decap term when the VIP prefix overlaps an existing VLAN subnet decap term"
     conditions_logical_operator: or
     conditions:
       - "topo_type not in ['t0']"
       - "asic_type not in ['vs', 'mellanox'] and asic_gen not in ['td3']"
       - "release in ['202012', '202205', '202305', '202311']"
+      - "asic_type == 'broadcom' and asic_gen == 'td3' and https://github.com/sonic-net/sonic-mgmt/issues/26694"
 
 decap/test_subnet_decap.py::test_vip_packet_decap[IPv6]:
   xfail:
@@ -2931,33 +2933,9 @@ gnmi/test_gnmi_configdb.py::test_gnmi_configdb_streaming_sample_01:
     conditions:
       - "'bmc' in topo_type"
 
-gnmi/test_gnmi_countersdb.py::test_gnmi_counterdb_polling_01:
+gnmi/test_gnmi_countersdb.py:
   skip:
-    reason: "Test relies on COUNTERS_PORT_NAME_MAP populated by syncd; not applicable on BMC"
-    conditions:
-      - "'bmc' in topo_type"
-
-gnmi/test_gnmi_countersdb.py::test_gnmi_counterdb_polling_02:
-  skip:
-    reason: "Test relies on COUNTERS_PORT_NAME_MAP populated by syncd; not applicable on BMC"
-    conditions:
-      - "'bmc' in topo_type"
-
-gnmi/test_gnmi_countersdb.py::test_gnmi_counterdb_streaming_sample_01:
-  skip:
-    reason: "not applicable on BMC (no COUNTERS_PORT_NAME_MAP)"
-    conditions:
-      - "'bmc' in topo_type"
-
-gnmi/test_gnmi_countersdb.py::test_gnmi_counterdb_streaming_sample_02:
-  skip:
-    reason: "not applicable on BMC (no COUNTERS_PORT_NAME_MAP)"
-    conditions:
-      - "'bmc' in topo_type"
-
-gnmi/test_gnmi_countersdb.py::test_gnmi_output:
-  skip:
-    reason: "not applicable on BMC (no COUNTERS_PORT_NAME_MAP)"
+    reason: "Not available in BMC"
     conditions:
       - "'bmc' in topo_type"
 
@@ -3371,7 +3349,8 @@ high_frequency_telemetry:
     reason: "High frequency telemetry isn't supported in this platform or on T2 topology"
     conditions_logical_operator: or
     conditions:
-      - "platform not in ['x86_64-nvidia_sn5600-r0', 'x86_64-nvidia_sn5640-r0', 'x86_64-arista_7060x6_64pe_b']"
+      - "platform not in ['x86_64-nvidia_sn5600-r0', 'x86_64-nvidia_sn5640-r0', 'x86_64-arista_7060x6_64pe_b', 'x86_64-kvm_x86_64-r0']"
+      - "platform == 'x86_64-kvm_x86_64-r0' and asic_type != 'vpp'"
       - "'bmc' in topo_type"
       - "'t2' in topo_type"
       - "topo_type in ['lrh', 'urh']"
